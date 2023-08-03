@@ -19,6 +19,7 @@ Compile with speed optimization: gcc -std=c99 measureDelay.c -lSoapySDR -lm -Ofa
 #include <SoapySDR/Device.h>
 #include <SoapySDR/Formats.h>
 #include <SoapySDR/Constants.h>
+#include <SoapySDR/Errors.h>
 
 #define SAVE_TO_FILE true
 #define ZERO_DELAY_SAMPLES 96
@@ -29,8 +30,8 @@ Compile with speed optimization: gcc -std=c99 measureDelay.c -lSoapySDR -lm -Ofa
 // #define FREQUENCY 222.500e6 //Hz
 #define FREQUENCY 0.1e9 //Hz
 #define CLOCK_RATE 100e6 //Hz
-#define SAMPLE_RATE_TX 10e6 //Hz
-#define SAMPLE_RATE_RX 10e6 //Hz
+#define SAMPLE_RATE_TX 30e6 //Hz
+#define SAMPLE_RATE_RX 30e6 //Hz
 #define BANDWIDTH_TX 50e6
 #define BANDWIDTH_RX 50e6
 #define CHANNEL_TX 0
@@ -49,6 +50,7 @@ Compile with speed optimization: gcc -std=c99 measureDelay.c -lSoapySDR -lm -Ofa
 #define CHIRP_BANDWIDTH SAMPLE_RATE_RX
 #define NUM_CHIRPS 10
 #define CHIRP_DELAY (long long) 0.3e9 //nanoseconds
+#define MAX_RETRIES 3
 
 #define PI 3.1415926535
 
@@ -534,7 +536,7 @@ void TransmitReceive(SoapySDRDevice* sdr, SoapySDRStream* txStream, SoapySDRStre
     }
 
     //Begin transmitting
-    int txStreamStatus;
+    int txStreamStatus = 0, rxStreamStatus = 0;
     for(int i = 0; i < CONTIGUOUS_BUFF_TX_LENGTH / BUFF_TX_LENGTH; i++)
     {
         buffsTx[0] = bufferTx;
@@ -547,9 +549,8 @@ void TransmitReceive(SoapySDRDevice* sdr, SoapySDRStream* txStream, SoapySDRStre
             printf("[TransmitReceive] Write stream failed: %d\n", txStreamStatus);
         }
     }
-    
-    //Begin receiving
-    int rxStreamStatus;
+
+    // //Begin receiving
     for(int i = 0; i < CONTIGUOUS_BUFF_RX_LENGTH / BUFF_RX_LENGTH; i++)
     {
         buffsRx[0] = bufferRx;
@@ -558,14 +559,14 @@ void TransmitReceive(SoapySDRDevice* sdr, SoapySDRStream* txStream, SoapySDRStre
         
         if(rxStreamStatus != BUFF_RX_LENGTH)
         {
-            printf("[TransmitReceive] Read stream failed. Samples captured: %d\n", rxStreamStatus);
+            printf("[TransmitReceive] Samples captured: %d\n", rxStreamStatus);
+            if(rxStreamStatus < 0)
+            {
+                printf("[TransmitReceive] Read stream failed. Error Code: %d\n", rxStreamStatus);
+            }
+            
             *firstSampleIndex = BUFF_RX_LENGTH - rxStreamStatus + ZERO_DELAY_SAMPLES;
         }
-
-        // if(i == 0)
-        // {
-        //     firstRxTimestamp = timestampRx;
-        // }
 
         if(rxStreamStatus < 0)  // Detect a failed chirp
         {
@@ -579,6 +580,7 @@ void TransmitReceive(SoapySDRDevice* sdr, SoapySDRStream* txStream, SoapySDRStre
             break;  // Skip this chirp, move on to the next one.
         }
     }
+
 }
 
 
